@@ -2,13 +2,13 @@
 
 ### Overview
 
-Pioneer Coin (PIO) is a revolutionary stablecoin designed to bring stability and sustainability to the cryptocurrency ecosystem. Backed by assets such as Bitcoin (BTC), Ethereum (ETH), and Solana (SOL), PIO is programmatically minted and pegged to the USD. Utilizing Chainlink price feeds for accurate collateral valuation, Pioneer Coin ensures secure, transparent, and reliable transactions.
+Pioneer Coin (PIO) is a revolutionary stablecoin designed to bring stability and sustainability to the cryptocurrency ecosystem. Backed by assets such as Bitcoin (BTC) and Ethereum (ETH), PIO is programmatically minted and pegged to the USD. Utilizing Chainlink price feeds for accurate collateral valuation, Pioneer Coin ensures secure, transparent, and reliable transactions.
 
 ### Key Features
 
 1. **Relative Stability**: Anchored or pegged to $1.00
-    - **Chainlink Pricefeed**: Utilizes Chainlink oracles to fetch real-time prices of BTC, ETH, and SOL to ensure accurate collateral valuation.
-    - **Exchange Functions**: Smart contract functions are set to exchange ETH, BTC, and SOL for PIO and vice-versa to maintain the peg.
+    - **Chainlink Pricefeed**: Utilizes Chainlink oracles to fetch real-time prices of BTC and ETH to ensure accurate collateral valuation.
+    - **Exchange Functions**: Smart contract functions are set to exchange BTC and ETH for PIO and vice-versa to maintain the peg.
 
 2. **Stability Mechanism (Minting)**: Algorithmic (Decentralized)
     - **Minting Process**: Users can only mint Pioneer Coin if they provide sufficient collateral. This ensures that each PIO token is backed by real assets, maintaining its stability.
@@ -18,17 +18,16 @@ Pioneer Coin (PIO) is a revolutionary stablecoin designed to bring stability and
 3. **Collateral Type**: Exogenous (Crypto)
     - **ETH (wETH)**
     - **BTC (wBTC)**
-    - **SOL (wSOL)**
 
 ### How It Works
 
 #### 1. Pegging to USD
 
-Pioneer Coin maintains a 1:1 peg to the US Dollar. This stability is achieved through the use of Chainlink price feeds, which provide real-time data on the prices of BTC, ETH, and SOL. The smart contract is programmed to adjust the collateral to ensure that each PIO token remains equivalent to $1.00.
+Pioneer Coin maintains a 1:1 peg to the US Dollar. This stability is achieved through the use of Chainlink price feeds, which provide real-time data on the prices of BTC and ETH. The smart contract is programmed to adjust the collateral to ensure that each PIO token remains equivalent to $1.00.
 
 #### 2. Minting Pioneer Coin
 
-The minting process is algorithmic and decentralized. Users can mint PIO tokens by depositing a combination of wETH, wBTC, and wSOL as collateral. The smart contract verifies the value of the collateral through Chainlink price feeds. Once the collateral requirement is met, PIO tokens are minted and issued to the user.
+The minting process is algorithmic and decentralized. Users can mint PIO tokens by depositing a combination of wETH and wBTC as collateral. The smart contract verifies the value of the collateral through Chainlink price feeds. Once the collateral requirement is met, PIO tokens are minted and issued to the user.
 
 #### 3. Collateral Types
 
@@ -36,7 +35,6 @@ Pioneer Coin is backed by three main cryptocurrencies:
 
 - **wETH (Wrapped Ethereum)**
 - **wBTC (Wrapped Bitcoin)**
-- **wSOL (Wrapped Solana)**
 
 These assets are chosen for their liquidity, stability, and widespread adoption in the cryptocurrency market.
 
@@ -60,7 +58,7 @@ Pioneer Coin can be used for a variety of purposes, including but not limited to
 
 To start using Pioneer Coin, follow these simple steps:
 
-1. Deposit wETH, wBTC, or wSOL into the Pioneer Coin smart contract.
+1. Deposit wETH or wBTC into the Pioneer Coin smart contract.
 2. The smart contract will verify the value of your collateral using Chainlink price feeds.
 3. Once verified, PIO tokens will be minted and issued to your wallet.
 4. Use PIO tokens for transactions, DeFi applications, or hold them as a stable asset.
