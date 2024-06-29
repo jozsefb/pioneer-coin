@@ -6,7 +6,7 @@ import {PioEngineEvents} from "./PioEngineEvents.sol";
 import {PioneerCoin} from "./PioneerCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { OracleLib, AggregatorV3Interface } from "./libraries/OracleLib.sol";
+import {OracleLib, AggregatorV3Interface} from "./libraries/OracleLib.sol";
 
 contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     ///////////////
@@ -89,13 +89,14 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral) 
     public moreThanZero(amountCollateral) nonReentrant isAllowedToken(tokenCollateralAddress) {
         s_collateralDeposited[msg.sender][tokenCollateralAddress] += amountCollateral;
-        if (!IERC20(tokenCollateralAddress).transferFrom(msg.sender, address(this), amountCollateral)) {
+        bool success = IERC20(tokenCollateralAddress).transferFrom(msg.sender, address(this), amountCollateral);
+        if (!success) {
             revert PIOEngine__TransferFailed();
         }
         emit CollateralDeposited(msg.sender, tokenCollateralAddress, amountCollateral);
     }
 
-    //////////////?////////////
+    ///////////////////////////
     // PUBLIC VIEW FUNCTIONS //
     ///////////////////////////
     function getAccountInformation(address user) public view returns (uint256 totalPioMinted, uint256 collateralUSDValue) {

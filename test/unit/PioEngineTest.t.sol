@@ -9,6 +9,7 @@ import {PioEngineEvents} from "../../src/PioEngineEvents.sol";
 import {DeployPio} from "../../script/DeployPio.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {ERC20MockTransferFail} from "../mocks/ERC20MockTransferFail.sol";
 
 contract PioEngineTest is Test {
     PioneerCoin private pio;
@@ -76,6 +77,21 @@ contract PioEngineTest is Test {
         (uint256 totalPioMinted, uint256 totalCollateralUsdValue) = engine.getAccountInformation(bob);
         assertEq(totalPioMinted, 0);
         assertEq(totalCollateralUsdValue, 20000e18); // 10 eth = $20.000
+    }
+
+    // this test needs it's own setup
+    function testRevertsIfTransferFromFails() public {
+        // arrange - create new engine with mock eth that always fails on transfers
+        ERC20MockTransferFail mockEth = new ERC20MockTransferFail();
+        PioEngine.TokenDetails[] memory collateralTokens = new PioEngine.TokenDetails[](1);
+        collateralTokens[0] = PioEngine.TokenDetails(PioEngine.CollateralToken.ETH, address(mockEth), eth.pricefeedAddress, true);
+        PioEngineImpl engine2 = new PioEngineImpl(collateralTokens, address(pio));
+
+        // act and assert
+        vm.startPrank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__TransferFailed.selector);
+        engine2.depositCollateral(address(mockEth), STARTING_USER_BALANCE);
+        vm.stopPrank();
     }
 
     // Mint Pio Tests
