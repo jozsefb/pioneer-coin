@@ -29,9 +29,8 @@ contract PioneerCoin is ERC20Burnable, Ownable {
         _;
     }
 
-    function mint(address _to, uint256 _amount) external onlyOwner greaterThanZero(_amount) returns(bool) {
+    function mint(address _to, uint256 _amount) external onlyOwner greaterThanZero(_amount) {
         _mint(_to, _amount);
-        return true;
     }
 
     function burn(uint256 _amount) public override onlyOwner greaterThanZero(_amount) {

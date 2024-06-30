@@ -17,10 +17,9 @@ contract PioneerCoinTest is Test {
         uint256 mintAmount = 1000;
 
         // Act
-        bool result = pioneerCoin.mint(address(this), mintAmount);
+        pioneerCoin.mint(address(this), mintAmount);
 
         // Assert
-        assertTrue(result);
         assertEq(pioneerCoin.balanceOf(address(this)), mintAmount);
     }
 

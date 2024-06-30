@@ -15,6 +15,9 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     error PIOEngine__MustBeMoreThanZero();
     error PIOEngine__InvalidToken();
     error PIOEngine__TransferFailed();
+    error PIOEngine__MintFailed();
+    error PIOEngine__BreaksHealthFactor();
+    error PioEngine__NotEnoughCollateral();
 
     ///////////////
     // TYPES     //
@@ -69,12 +72,16 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     // EXTERNAL FUNCTIONS //
     ////////////////////////
     function depositCollateralAndMintPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToMint) override external {
+        depositCollateral(tokenCollateralAddress, amountCollateral);
+        mintPio(amountToMint);
     }
 
     function redeemCollateralForPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToBurn) override external {
     }
 
-    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral) override external moreThanZero(amountCollateral) nonReentrant {
+    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral) override 
+    external moreThanZero(amountCollateral) nonReentrant isAllowedToken(tokenCollateralAddress) {
+        _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
     }
 
     function burn(uint256 amount) override external moreThanZero(amount) nonReentrant {
@@ -96,9 +103,15 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
         emit CollateralDeposited(msg.sender, tokenCollateralAddress, amountCollateral);
     }
 
-    ///////////////////////////
-    // PUBLIC VIEW FUNCTIONS //
-    ///////////////////////////
+    function mintPio(uint256 amount) public moreThanZero(amount) nonReentrant {
+        s_pioMinted[msg.sender] += amount;
+        _revertIfHealthFactorIsBroken(msg.sender);
+        i_pio.mint(msg.sender, amount);
+    }
+
+    /////////////////////////////////////////////
+    // PUBLIC & EXTERNAL VIEW & PURE FUNCTIONS //
+    /////////////////////////////////////////////
     function getAccountInformation(address user) public view returns (uint256 totalPioMinted, uint256 collateralUSDValue) {
         return (s_pioMinted[user], getAccountCollateralValue(user));
     }
@@ -117,5 +130,49 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
         // 1 ETH = $1000
         // The returned value from CL will be 1000 * 1e8 because it uses 8 decimal places
         return ((uint256(price) * ADDITIONAL_PRICE_FEED_PRECISION) * amount) / PRECISION;
-    } 
+    }
+
+    function getHealthFactor(address user) external view returns (uint256) {
+        return _healthFactor(user);
+    }
+
+    //////////////////////////////////////////////
+    // Private & Internal View & Pure Functions //
+    //////////////////////////////////////////////
+    function _revertIfHealthFactorIsBroken(address user) internal view {
+        uint256 userHealthFactor = _healthFactor(user);
+        if (userHealthFactor < MIN_HEALTH_FACTOR) {
+            revert PIOEngine__BreaksHealthFactor();   
+        }
+    }
+
+    /**
+     * @dev Returns how close to liquidation the user is. If a user goes below 1, then they can get liquidated.
+     */
+    function _healthFactor(address user) private view returns (uint256) {
+        // total PIO minted / total collateral VALUE in USD
+        (uint256 totalPioMinted, uint256 collateralValueInUsd) = getAccountInformation(user);
+        if (totalPioMinted == 0) return type(uint256).max;
+        uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / 100;
+        return (collateralAdjustedForThreshold * PRECISION) / totalPioMinted;
+    }
+
+    function _redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral, address from, address to) internal {
+        _redeemCollateral(tokenCollateralAddress, amountCollateral, from, to, true);
+    }
+
+    function _redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral, address from, address to, bool validateHealthFactor) internal {
+        if (s_collateralDeposited[from][tokenCollateralAddress] < amountCollateral) {
+            revert PioEngine__NotEnoughCollateral();
+        }
+        s_collateralDeposited[from][tokenCollateralAddress] -= amountCollateral;
+        if (validateHealthFactor) {
+            _revertIfHealthFactorIsBroken(from);
+        }
+        bool success = IERC20(tokenCollateralAddress).transfer(to, amountCollateral);
+        if (!success) {
+            revert PIOEngine__TransferFailed();
+        }
+        emit PioEngineEvents.CollateralRedeemed(from, to, tokenCollateralAddress, amountCollateral);
+    }
 }
