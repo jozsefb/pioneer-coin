@@ -36,16 +36,17 @@ interface PioEngine {
      * @param amountCollateral: The amount of collateral you're depositing
      * @param amountToMint: The amount of PIO you want to mint
      * @notice This function will deposit your collateral and mint PIO in one transaction
+     * @notice the amount of collateral and the amount to mint must be positive and the token collateral must be accepted
      */
-    function depositCollateralAndMintPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToMint) external;
+    function depositCollateralAndMintPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToMint) external payable;
 
     /**
-     * @param tokenCollateralAddress: The ERC20 token address of the collateral you're depositing
-     * @param amountCollateral: The amount of collateral you're depositing
+     * @param tokenCollateralAddress: The ERC20 token address of the collateral you're redeeming
+     * @param amountCollateral: The amount of collateral you want to redeeming
      * @param amountToBurn: The amount of PIO you want to burn
      * @notice This function will withdraw your collateral and burn PIO in one transaction
      */
-    function redeemCollateralForPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToBurn) external;
+    function redeemCollateralAndBurnPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToBurn) external;
 
     /**
      * @param tokenCollateralAddress: The ERC20 token address of the collateral you're redeeming
@@ -56,6 +57,7 @@ interface PioEngine {
     function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral) external;
 
     /**
+     * @param amount: The amount of PIO you want to burn
      * @notice careful! You'll burn your PIO here! Make sure you want to do this...
      * @dev you might want to use this if you're nervous you might get liquidated and want to just burn some PIO  but keep your collateral in.
      */

@@ -145,6 +145,30 @@ contract PioEngineTest is Test {
     }
 
     // deposit collateral and mint pio tests
+    function testDepositCollateralAndMintPioRevertsIfZeroAmountCollateral() public depositedCollateral {
+        vm.startPrank(bob);
+        ERC20Mock(weth).approve(address(engine), STARTING_USER_BALANCE);
+        vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
+        engine.depositCollateralAndMintPio(weth, 0, MINT_AMOUNT);
+        vm.stopPrank();
+    }
+
+    function testDepositCollateralAndMintPioRevertsIfZeroAmountToMint() public depositedCollateral {
+        vm.startPrank(bob);
+        ERC20Mock(weth).approve(address(engine), STARTING_USER_BALANCE);
+        vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
+        engine.depositCollateralAndMintPio(weth, STARTING_USER_BALANCE, 0);
+        vm.stopPrank();
+    }
+
+    function testDepositCollateralAndMintPioRevertsIfInvalidCollateral() public depositedCollateral {
+        ERC20Mock mockToken = new ERC20Mock();
+        vm.startPrank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__InvalidToken.selector);
+        engine.depositCollateralAndMintPio(address(mockToken), STARTING_USER_BALANCE, MINT_AMOUNT);
+        vm.stopPrank();
+    }
+
     modifier depositedCollateralAndPioMinted() {
         vm.startPrank(bob);
         ERC20Mock(weth).approve(address(engine), STARTING_USER_BALANCE);
@@ -190,6 +214,7 @@ contract PioEngineTest is Test {
     function testRedeemCollateralRevertsIfTransferFails() public {
         // arrange - create new engine with mock eth that always fails on transfers
         ERC20MockTransferFail mockEth = new ERC20MockTransferFail();
+        mockEth.mint(bob, STARTING_USER_BALANCE);
         PioEngine.TokenDetails[] memory collateralTokens = new PioEngine.TokenDetails[](1);
         collateralTokens[0] = PioEngine.TokenDetails(PioEngine.CollateralToken.ETH, address(mockEth), eth.pricefeedAddress, true);
         PioEngineImpl engine2 = new PioEngineImpl(collateralTokens, address(pio));
@@ -199,6 +224,7 @@ contract PioEngineTest is Test {
 
         // act and assert
         vm.startPrank(bob);
+        mockEth.approve(address(engine2), STARTING_USER_BALANCE);
         engine2.depositCollateralAndMintPio(address(mockEth), STARTING_USER_BALANCE, MINT_AMOUNT);
         vm.expectRevert(PioEngineImpl.PIOEngine__TransferFailed.selector);
         engine2.redeemCollateral(address(mockEth), 1e18);
@@ -230,6 +256,62 @@ contract PioEngineTest is Test {
     }
 
     // Burn Pio Tests
+    function testBurnRevertsIfZeroAmount() public depositedCollateralAndPioMinted {
+        vm.prank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
+        engine.burn(0);
+    }
+
+    function testBurnRevertsIfNotEnoughPio() public depositedCollateralAndPioMinted {
+        vm.prank(bob);
+        vm.expectRevert(PioEngineImpl.PioEngine__NotEnoughPio.selector);
+        engine.burn(MINT_AMOUNT + 1);
+    }
+
+    function testBurnSuccess() public depositedCollateralAndPioMinted {
+        vm.startPrank(bob);
+        pio.approve(address(engine), 1e21);
+        engine.burn(1e21);
+        vm.stopPrank();
+        assertEq(pio.balanceOf(bob), 4e21);
+    }
+
+    // Redeem Collateral and Burn Pio Tests
+    function testRedeemCollateralAndBurnRevertsIfZeroAmountCollateral() public depositedCollateralAndPioMinted {
+        vm.startPrank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
+        engine.redeemCollateralAndBurnPio(weth, 0, MINT_AMOUNT);
+        vm.stopPrank();
+    }
+
+    function testRedeemCollateralAndBurnRevertsIfZeroAmountToBurn() public depositedCollateralAndPioMinted {
+        vm.startPrank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
+        engine.redeemCollateralAndBurnPio(weth, 1 ether, 0);
+        vm.stopPrank();
+    }
+
+    function testRedeemCollateralAndBurnRevertsIfInvalidCollateral() public depositedCollateralAndPioMinted {
+        ERC20Mock newMockedToken = new ERC20Mock();
+        vm.startPrank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__InvalidToken.selector);
+        engine.redeemCollateralAndBurnPio(address(newMockedToken), 1 ether, 1 ether);
+        vm.stopPrank();
+    }
+
+    function testRedeemCollateralAndBurnPioSuccess() public depositedCollateralAndPioMinted {
+        (uint256 pioAmount, uint256 totalCollateralUsdValue) = engine.getAccountInformation(bob);
+        uint256 burnAmount = 2e21;
+        uint256 expectedPioAmount = pioAmount - burnAmount;
+        uint256 expectedCollateralAmount = totalCollateralUsdValue - REDEEM_AMOUNT * 2000;
+        vm.startPrank(bob);
+        pio.approve(address(engine), burnAmount);
+        engine.redeemCollateralAndBurnPio(weth, REDEEM_AMOUNT, burnAmount); // burns same amount as redeems
+        vm.stopPrank();
+        (uint256 newPioAmount, uint256 newTotalCollateralUsdValue) = engine.getAccountInformation(bob);
+        assertEq(newPioAmount, expectedPioAmount);
+        assertEq(newTotalCollateralUsdValue, expectedCollateralAmount);
+    }
 
     // Liquidation Tests
 

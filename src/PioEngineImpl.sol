@@ -18,6 +18,7 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     error PIOEngine__MintFailed();
     error PIOEngine__BreaksHealthFactor();
     error PioEngine__NotEnoughCollateral();
+    error PioEngine__NotEnoughPio();
 
     ///////////////
     // TYPES     //
@@ -71,20 +72,25 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     ////////////////////////
     // EXTERNAL FUNCTIONS //
     ////////////////////////
-    function depositCollateralAndMintPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToMint) override external {
+    function depositCollateralAndMintPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToMint) override 
+    external moreThanZero(amountCollateral) moreThanZero(amountToMint) isAllowedToken(tokenCollateralAddress) payable {
         depositCollateral(tokenCollateralAddress, amountCollateral);
         mintPio(amountToMint);
     }
 
-    function redeemCollateralForPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToBurn) override external {
+    function redeemCollateralAndBurnPio(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountToBurn) override 
+    external moreThanZero(amountCollateral) moreThanZero(amountToBurn) isAllowedToken(tokenCollateralAddress) nonReentrant {
+        _burnPio(msg.sender, msg.sender, amountToBurn);
+        _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
     }
 
     function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral) override 
-    external moreThanZero(amountCollateral) nonReentrant isAllowedToken(tokenCollateralAddress) {
+    external moreThanZero(amountCollateral) isAllowedToken(tokenCollateralAddress) nonReentrant {
         _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
     }
 
     function burn(uint256 amount) override external moreThanZero(amount) nonReentrant {
+        _burnPio(msg.sender, msg.sender, amount);
     }
 
     function liquidate(address collateral, address user, uint256 debtToCover) override external moreThanZero(debtToCover) nonReentrant {
@@ -175,4 +181,14 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
         }
         emit PioEngineEvents.CollateralRedeemed(from, to, tokenCollateralAddress, amountCollateral);
     }
+
+    function _burnPio(address onBehalfOf, address from, uint256 amount) private {
+        if (s_pioMinted[onBehalfOf] < amount) {
+            revert PioEngine__NotEnoughPio();
+        }
+        s_pioMinted[onBehalfOf] -= amount;
+        i_pio.transferFrom(from, address(this), amount);
+        i_pio.burn(amount);
+    } 
+
 }
