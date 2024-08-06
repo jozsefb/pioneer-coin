@@ -7,6 +7,7 @@ import {PioneerCoin} from "./PioneerCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OracleLib, AggregatorV3Interface} from "./libraries/OracleLib.sol";
+import {console} from "forge-std/console.sol";
 
 contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     ///////////////
@@ -19,6 +20,8 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     error PIOEngine__BreaksHealthFactor();
     error PioEngine__NotEnoughCollateral();
     error PioEngine__NotEnoughPio();
+    error PioEngine__HealthfactorOK();
+    error PioEngine__HealthfactorNotImproved();
 
     ///////////////
     // TYPES     //
@@ -31,8 +34,8 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     uint256 private constant ADDITIONAL_PRICE_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; // 200% collateralized
-    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
-    uint256 private constant LIQUIDATION_BONUS = 10;
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;  // 1.0 -> liquidate when Healthfactor < 1.0
+    uint256 private constant LIQUIDATION_BONUS = 10;    // 10%
     uint256 private constant LIQUIDATION_PRECISION = 100;
 
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
@@ -93,7 +96,9 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
         _burnPio(msg.sender, msg.sender, amount);
     }
 
-    function liquidate(address collateral, address user, uint256 debtToCover) override external moreThanZero(debtToCover) nonReentrant {
+    function liquidate(address tokenCollateralAddress, address userToLiquidate, uint256 debtToCoverInPio) override 
+    external moreThanZero(debtToCoverInPio) isAllowedToken(tokenCollateralAddress) nonReentrant {
+        _liquidate(tokenCollateralAddress, userToLiquidate, debtToCoverInPio);
     }
 
     ////////////////////////
@@ -138,6 +143,13 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
         return ((uint256(price) * ADDITIONAL_PRICE_FEED_PRECISION) * amount) / PRECISION;
     }
 
+    function getTokenAmountFromUSDValue(address token, uint256 amount) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+        // $10e18 * 1e18 / $2000e8 * 1e10 -> Xe18
+        return (amount * PRECISION) / ((uint256(price) * ADDITIONAL_PRICE_FEED_PRECISION)); // convert to price 
+    }
+
     function getHealthFactor(address user) external view returns (uint256) {
         return _healthFactor(user);
     }
@@ -158,8 +170,11 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     function _healthFactor(address user) private view returns (uint256) {
         // total PIO minted / total collateral VALUE in USD
         (uint256 totalPioMinted, uint256 collateralValueInUsd) = getAccountInformation(user);
+        console.log("totalPioMinted: ", totalPioMinted / 1e16);
+        console.log("collateralValueInUsd: ", collateralValueInUsd / 1e16);
         if (totalPioMinted == 0) return type(uint256).max;
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / 100;
+        console.log("collateralAdjustedForThreshold: ", collateralAdjustedForThreshold / 1e16);
         return (collateralAdjustedForThreshold * PRECISION) / totalPioMinted;
     }
 
@@ -189,6 +204,28 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
         s_pioMinted[onBehalfOf] -= amount;
         i_pio.transferFrom(from, address(this), amount);
         i_pio.burn(amount);
-    } 
+    }
 
+    function _liquidate(address collateral, address user, uint256 debtToCover) internal {
+        console.log("1");
+        console.log("collateral: ", s_collateralDeposited[msg.sender][collateral] / 1e16);
+        // need to check the healthFactor of the user
+        uint256 startingUserHealthFactor = _healthFactor(user);
+        if (startingUserHealthFactor >= MIN_HEALTH_FACTOR) {
+            revert PioEngine__HealthfactorOK();
+        }
+        // burn their Pio "debt"
+        // give them a 10% bonus to take
+        // take their collateral
+        uint256 tokenAmountFromDebtCovered = getTokenAmountFromUSDValue(collateral, debtToCover);
+        uint256 bonusCollateral = tokenAmountFromDebtCovered * LIQUIDATION_BONUS / LIQUIDATION_PRECISION;
+        uint256 totalCollateralToRedeem = tokenAmountFromDebtCovered + bonusCollateral;
+        _burnPio(user, msg.sender, debtToCover);
+        _redeemCollateral(collateral, totalCollateralToRedeem, user, msg.sender, false);
+        uint256 endingUserHealthFactor = _healthFactor(user);
+        if (endingUserHealthFactor <= startingUserHealthFactor) {
+            revert PioEngine__HealthfactorNotImproved();
+        }
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 }

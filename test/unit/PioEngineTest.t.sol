@@ -11,6 +11,7 @@ import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {ERC20MockTransferFail} from "../mocks/ERC20MockTransferFail.sol";
 import {ERC20MockTransferFromFail} from "../mocks/ERC20MockTransferFromFail.sol";
+import {MockV3Aggregator} from "@chainlink/contracts/src/v0.8/tests/MockV3Aggregator.sol";
 
 contract PioEngineTest is Test {
     PioneerCoin private pio;
@@ -19,6 +20,7 @@ contract PioEngineTest is Test {
     PioEngine.TokenDetails private eth;
     address private weth;
 
+    uint256 private constant ETH_BALANCE = 100 ether;
     uint256 private constant STARTING_USER_BALANCE = 10 ether;
     uint256 private constant MIN_HEALTH_FACTOR = 1e18;   // 1.0
     uint256 private constant LIQUIDATION_THRESHOLD = 50;
@@ -26,6 +28,7 @@ contract PioEngineTest is Test {
     uint256 private constant REDEEM_AMOUNT = 1 ether; // usd/pio value 2e21
 
     address private bob = makeAddr("Bob");
+    address private alice = makeAddr("Alice");
 
     function setUp() public {
         DeployPio deployer = new DeployPio();
@@ -34,12 +37,15 @@ contract PioEngineTest is Test {
         btc = tokenDetails[0];
         eth = tokenDetails[1];
         weth = eth.tokenAddress;
-        ERC20Mock(weth).mint(bob, 100 ether);
+        ERC20Mock(weth).mint(bob, ETH_BALANCE);
     }
 
-    /**
-    *  Deposit Collateral Tests
-    */
+
+
+
+    ///////////////////////////////////////
+    //    Deposit Collateral Tests    /////
+    ///////////////////////////////////////
     function testDepositRevertOnZeroCollateral() public {
         vm.startPrank(bob);
         ERC20Mock(weth).approve(address(pio), 1 ether);
@@ -97,14 +103,38 @@ contract PioEngineTest is Test {
         vm.stopPrank();
     }
 
-    // Health Factor Tests
+
+
+
+
+    /////////////////////////////////
+    //    Health Factor Tests    ////
+    /////////////////////////////////
     function testHealthFactorIsInfiniteWhenNoPioMinted() public depositedCollateral {
         vm.prank(bob);
         engine.getHealthFactor(bob);
         assertEq(engine.getHealthFactor(bob), type(uint256).max);
     }
 
-    // Mint Pio Tests
+    function testHealthFactorIsReportedCorrectly() public depositedCollateral pioMinted {
+        // arrange
+        uint256 initialHealthFactor = engine.getHealthFactor(bob);
+        vm.prank(bob);
+        // act
+        engine.mintPio(MINT_AMOUNT); // doubling the minted amount
+        // assert
+        uint256 newHealthFactor = engine.getHealthFactor(bob);
+        assertTrue(initialHealthFactor > 0);
+        assertTrue(newHealthFactor < initialHealthFactor);
+        assertEq(newHealthFactor, initialHealthFactor / 2);
+    }
+
+
+
+
+    ////////////////////////////
+    //    Mint Pio Tests    ////
+    ////////////////////////////
     function testMintPioZeroAmount() public depositedCollateral {
         vm.prank(bob);
         vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
@@ -130,21 +160,13 @@ contract PioEngineTest is Test {
         assertEq(totalSupply, MINT_AMOUNT);
     }
 
-    // Health factor test 2
-    function testHealthFactorIsReportedCorrectly() public depositedCollateral pioMinted {
-        // arrange
-        uint256 initialHealthFactor = engine.getHealthFactor(bob);
-        vm.prank(bob);
-        // act
-        engine.mintPio(MINT_AMOUNT); // doubling the minted amount
-        // assert
-        uint256 newHealthFactor = engine.getHealthFactor(bob);
-        assertTrue(initialHealthFactor > 0);
-        assertTrue(newHealthFactor < initialHealthFactor);
-        assertEq(newHealthFactor, initialHealthFactor / 2);
-    }
 
-    // deposit collateral and mint pio tests
+
+
+
+    ///////////////////////////////////////////////////
+    //    deposit collateral and mint pio tests    ////
+    ///////////////////////////////////////////////////
     function testDepositCollateralAndMintPioRevertsIfZeroAmountCollateral() public depositedCollateral {
         vm.startPrank(bob);
         ERC20Mock(weth).approve(address(engine), STARTING_USER_BALANCE);
@@ -184,7 +206,13 @@ contract PioEngineTest is Test {
         assertEq(totalCollateralUsdValue, 20e21);
     }
 
-    // Redeem Collateral Tests
+
+
+
+
+    /////////////////////////////////////
+    //    Redeem Collateral Tests    ////
+    /////////////////////////////////////
     function testRedeemCollateralRevertsIfZeroAmount() public depositedCollateralAndPioMinted {
         vm.prank(bob);
         vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
@@ -255,7 +283,13 @@ contract PioEngineTest is Test {
         assertTrue(newHealthFactor < initialHealthFactor);
     }
 
-    // Burn Pio Tests
+
+
+
+
+    ////////////////////////////
+    //    Burn Pio Tests    ////
+    ////////////////////////////
     function testBurnRevertsIfZeroAmount() public depositedCollateralAndPioMinted {
         vm.prank(bob);
         vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
@@ -276,7 +310,14 @@ contract PioEngineTest is Test {
         assertEq(pio.balanceOf(bob), 4e21);
     }
 
-    // Redeem Collateral and Burn Pio Tests
+
+
+
+
+
+    //////////////////////////////////////////////////
+    //    Redeem Collateral and Burn Pio Tests    ////
+    //////////////////////////////////////////////////
     function testRedeemCollateralAndBurnRevertsIfZeroAmountCollateral() public depositedCollateralAndPioMinted {
         vm.startPrank(bob);
         vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
@@ -313,10 +354,175 @@ contract PioEngineTest is Test {
         assertEq(newTotalCollateralUsdValue, expectedCollateralAmount);
     }
 
-    // Liquidation Tests
 
 
-    // Price Feed Tests
 
-    // Oracle Tests
+
+    //////////////////////////////
+    //    Price Feed Tests    ////
+    //////////////////////////////
+    function testGetTokenAmountFromUSDValueReturnsTheCorrectValue() public view {
+        uint256 usdValue = 2000e18; // $2k represented with 18 decimals
+        uint256 expectedCollateralAmount = 1 ether; // 1 eth = $2k
+        uint256 result = engine.getTokenAmountFromUSDValue(weth, usdValue);
+        assertEq(expectedCollateralAmount, result); 
+    }
+
+    function testGetUsdValueReturnsTheCorrectValue() public view {
+        uint256 expectedUsdValue = 2000e18; // $2k represented with 18 decimals
+        uint256 result = engine.getUsdValue(weth, 1 ether);
+        assertEq(expectedUsdValue, result);
+    }
+
+    function testGetAccountCollateralValueReturnsTheCorrectValue() public depositedCollateral {
+        vm.startPrank(bob);
+        ERC20Mock(btc.tokenAddress).mint(bob, STARTING_USER_BALANCE);
+        ERC20Mock(btc.tokenAddress).approve(address(engine), STARTING_USER_BALANCE);
+        engine.depositCollateral(btc.tokenAddress, 1 ether);
+        vm.stopPrank();
+        uint256 expectedUsdValue = 70000e18; // $50k from btc + $20k from eth
+        uint256 result = engine.getAccountCollateralValue(bob);
+        assertEq(expectedUsdValue, result);
+    }
+
+
+
+
+    /////////////////////////////////
+    //    Liquidation Tests    //////
+    /////////////////////////////////
+    function testLiquidateRevertsIfZeroAmount() public depositedCollateralAndPioMinted {
+        vm.prank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__MustBeMoreThanZero.selector);
+        engine.liquidate(weth, alice, 0);
+    }
+
+    modifier aliceMintedPio() {
+        ERC20Mock(weth).mint(alice, ETH_BALANCE);
+        vm.startPrank(alice);
+        ERC20Mock(weth).approve(address(engine), STARTING_USER_BALANCE);
+        engine.depositCollateralAndMintPio(weth, 1 ether, 1000e18); // alice mints for the max collateral value (1/5 of Bob)
+        vm.stopPrank();
+        _;
+    }
+
+    function testLiquidationRevertsIfHealthFactorAboveThreshold() public depositedCollateralAndPioMinted aliceMintedPio {
+        vm.prank(bob);
+        vm.expectRevert(PioEngineImpl.PioEngine__HealthfactorOK.selector);
+        engine.liquidate(weth, alice, 1 ether);
+    }
+
+    modifier ethPriceDrops() {
+        MockV3Aggregator(eth.pricefeedAddress).updateAnswer(1500e8); // $1.5k
+        _;
+    }
+
+    // not enough collateral to give to the user that's making the liquidation
+    // cannot liquidate a higher amount than the debt to cover
+
+    function testLiquidateRevertsIfInvalidCollateral() public depositedCollateralAndPioMinted aliceMintedPio ethPriceDrops {
+        address newToken = address(new ERC20Mock());
+        vm.startPrank(bob);
+        vm.expectRevert(PioEngineImpl.PIOEngine__InvalidToken.selector);
+        engine.liquidate(newToken, alice, 1 ether);
+        vm.stopPrank();
+    }
+
+    // liquidate 100 PIO and request btc -> this is too much because alice only deposited eth
+    function testLiquidateRevertsIfInsufficientCollateral() public depositedCollateralAndPioMinted aliceMintedPio ethPriceDrops {
+        vm.startPrank(bob);
+        vm.expectRevert();
+        engine.liquidate(btc.tokenAddress, alice, 100e18);
+        vm.stopPrank();
+    }
+
+    function testLiquidateRevertsIfAmountLargerThanDebtToCover() public depositedCollateralAndPioMinted aliceMintedPio ethPriceDrops {
+        vm.startPrank(bob);
+        vm.expectRevert(PioEngineImpl.PioEngine__NotEnoughPio.selector);
+        engine.liquidate(eth.tokenAddress, alice, 1001e18); // alice minted 1000 pio
+        vm.stopPrank();
+    }
+
+    /**
+    ETH_USD_PRICE = 2000e8
+    LIQUIDATION_THRESHOLD = 50% (0.5)
+    Alice: deposit: 1 eth ($2000), mint $1000 PIO -> health factor (1.0)
+
+    ETH_USD_PRICE = 1000e8
+    Alice account: 1 eth ($1000), $1000 PIO -> health factor (0.5)
+
+    Bob liquidates: $100 PIO -> 
+    1. Alice: 1 eth, $900 PIO
+    2. Alice: 1 eth - ($100 + $10) -> 0.89 eth ($890)
+    3. Alice: 0.89 eth ($890), $900 PIO -> health factor -> health factor (0.494)
+    */
+    function testLiquidateReversIfHealthFactorNotImproved() public depositedCollateralAndPioMinted aliceMintedPio {
+        MockV3Aggregator(eth.pricefeedAddress).updateAnswer(1000e8); // $1k
+        uint256 amountToLiquidate = 100e18;
+        vm.startPrank(bob);
+        pio.approve(address(engine), amountToLiquidate);
+        vm.expectRevert(PioEngineImpl.PioEngine__HealthfactorNotImproved.selector);
+        engine.liquidate(eth.tokenAddress, alice, amountToLiquidate); // alice minted 1000 pio
+        vm.stopPrank();
+    }
+
+    /**
+    ETH_USD_PRICE = 2000e8
+    LIQUIDATION_THRESHOLD = 50% (0.5)
+    Alice: deposit: 1 eth ($2000), mint $1000 PIO -> health factor (1.0)
+
+    ETH_USD_PRICE = 1500e8
+    Alice account: 1 eth ($1500), $1000 PIO -> health factor (0.75)
+
+    Bob liquidates: $500 PIO -> 
+    1. Alice: 1 eth, $500 PIO
+    2. Alice: 1 eth ($1500) - ($500 + $50) -> 0.63 eth ($950)
+    3. Alice: 0.63 eth ($950), $500 PIO -> health factor -> health factor (0.95)
+    */
+    function testLiquidateImprovesHealthFactor() public depositedCollateralAndPioMinted aliceMintedPio ethPriceDrops {
+        uint256 initialHealthFactor = engine.getHealthFactor(alice);
+        uint256 amountToLiquidate = 500e18;
+        vm.startPrank(bob);
+        pio.approve(address(engine), amountToLiquidate);
+        engine.liquidate(eth.tokenAddress, alice, amountToLiquidate); // alice minted 1000 pio
+        vm.stopPrank();
+        uint256 newHealthFactor = engine.getHealthFactor(alice);
+        assertTrue(newHealthFactor > initialHealthFactor);
+    }
+
+    function testLiquidateDecreasesCollateralOfLiquidee() public depositedCollateralAndPioMinted aliceMintedPio ethPriceDrops {
+        uint256 amountToLiquidate = 500e18;
+        vm.startPrank(bob);
+        pio.approve(address(engine), amountToLiquidate);
+        engine.liquidate(eth.tokenAddress, alice, amountToLiquidate); // alice minted 1000 pio
+        vm.stopPrank();
+        uint256 aliceEthBalance = ERC20Mock(weth).balanceOf(alice);
+        assertTrue(aliceEthBalance < ETH_BALANCE);
+    }
+
+    function testLiquidateGives10PercentBonusCollateral() public depositedCollateralAndPioMinted aliceMintedPio ethPriceDrops {
+        uint256 amountToLiquidate = 1000e18;
+        vm.startPrank(bob);
+        pio.approve(address(engine), amountToLiquidate);
+        engine.liquidate(eth.tokenAddress, alice, amountToLiquidate); // alice minted 1000 pio
+        vm.stopPrank();
+        uint256 bobEthBalance = ERC20Mock(weth).balanceOf(bob);
+        uint256 expecetedCollateral = (amountToLiquidate + amountToLiquidate / 10) / 1500;
+        uint256 expectedBalance = ETH_BALANCE - STARTING_USER_BALANCE + expecetedCollateral;
+        assertTrue(expectedBalance - bobEthBalance <= 1);
+    }
+
+    //bob health factor < 1 -> liquidate alice -> revert
+    function testLiqudateRevertsIfUserHealthFactorBroken() public depositedCollateralAndPioMinted aliceMintedPio {
+        vm.startPrank(bob);
+        engine.redeemCollateral(weth, 5 ether); // redeem collateral -> bob health factor == alice helath factor == 1
+        vm.stopPrank();
+        MockV3Aggregator(eth.pricefeedAddress).updateAnswer(1500e8); // bob hf = alice hf = 0.5
+        uint256 amountToLiquidate = 500e18;
+        vm.startPrank(bob);
+        pio.approve(address(engine), amountToLiquidate);
+        vm.expectRevert(PioEngineImpl.PIOEngine__BreaksHealthFactor.selector);
+        engine.liquidate(eth.tokenAddress, alice, amountToLiquidate);
+        vm.stopPrank();
+    }
 }
