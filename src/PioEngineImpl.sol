@@ -7,7 +7,6 @@ import {PioneerCoin} from "./PioneerCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OracleLib, AggregatorV3Interface} from "./libraries/OracleLib.sol";
-import {console} from "forge-std/console.sol";
 
 contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     ///////////////
@@ -170,11 +169,8 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     function _healthFactor(address user) private view returns (uint256) {
         // total PIO minted / total collateral VALUE in USD
         (uint256 totalPioMinted, uint256 collateralValueInUsd) = getAccountInformation(user);
-        console.log("totalPioMinted: ", totalPioMinted / 1e16);
-        console.log("collateralValueInUsd: ", collateralValueInUsd / 1e16);
         if (totalPioMinted == 0) return type(uint256).max;
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / 100;
-        console.log("collateralAdjustedForThreshold: ", collateralAdjustedForThreshold / 1e16);
         return (collateralAdjustedForThreshold * PRECISION) / totalPioMinted;
     }
 
@@ -207,8 +203,6 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     }
 
     function _liquidate(address collateral, address user, uint256 debtToCover) internal {
-        console.log("1");
-        console.log("collateral: ", s_collateralDeposited[msg.sender][collateral] / 1e16);
         // need to check the healthFactor of the user
         uint256 startingUserHealthFactor = _healthFactor(user);
         if (startingUserHealthFactor >= MIN_HEALTH_FACTOR) {
