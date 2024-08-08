@@ -7,6 +7,7 @@ import {PioneerCoin} from "./PioneerCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OracleLib, AggregatorV3Interface} from "./libraries/OracleLib.sol";
+import {console} from "forge-std/console.sol";
 
 contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
     ///////////////
@@ -151,6 +152,10 @@ contract PioEngineImpl is PioEngine, PioEngineEvents, ReentrancyGuard {
 
     function getHealthFactor(address user) external view returns (uint256) {
         return _healthFactor(user);
+    }
+
+    function getCollateralBananceOfUser(address user, address token) public view returns (uint256) {
+        return s_collateralDeposited[user][token];
     }
 
     //////////////////////////////////////////////
